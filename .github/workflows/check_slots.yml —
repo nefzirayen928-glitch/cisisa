@@ -1,0 +1,46 @@
+name: Check CISIA slots
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions cron is best-effort and can lag
+    # further behind under platform load — treat this as "as fast as
+    # GitHub's free scheduler allows", not a guaranteed 5-minute cadence.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}   # lets you trigger a manual run from the Actions tab
+
+permissions:
+  contents: write   # needed so the workflow can commit the updated state.json
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper
+        env:
+          CALENDAR_URL: ${{ vars.CALENDAR_URL }}
+          FILTER_KEYWORDS: ${{ vars.FILTER_KEYWORDS }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python scraper.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "cisia-monitor-bot"
+          git config user.email "actions@github.com"
+          git add state.json
+          git diff --quiet --cached || git commit -m "Update state [skip ci]"
+          git push
